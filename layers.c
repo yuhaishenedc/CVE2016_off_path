@@ -279,6 +279,7 @@ struct tcp_header *session_read_packet(Session *ctx) {
 	struct pcap_pkthdr *header; 
 	const u_char *packet;
 
+	//if the process of reading the next packet success
 	if (pcap_next_ex(ctx->handle, &header, &packet)) {
 		struct ipv4_header *v4_h = (struct ipv4_header *)(packet + 16);
 		struct tcp_header *unsafe_h = ipv4_get_tcp(v4_h, header->caplen-16);

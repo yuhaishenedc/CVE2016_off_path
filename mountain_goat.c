@@ -43,6 +43,7 @@ unsigned count_acks_for_2secs(Session *ctx) {
 	int response_count = 0;
 	int start = time(NULL);
 	while (time(NULL)-start <= 1) {
+		//get the tcp header from the packet
 		struct tcp_header *h = session_read_packet(ctx);
 		if (h == NULL)
 			continue;
