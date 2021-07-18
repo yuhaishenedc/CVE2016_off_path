@@ -30,3 +30,13 @@ struct sockaddr_in{
 struct in_addr{
 	uint32_t s_addr;
 }
+
+
+/*
+	/usr/include/pcap/pcap.h
+*/
+struct pcap_pkthdr{
+	struct timeval ts;		//time stamp;	
+	bpf_u_int32 caplen;		//the actual packet length we get
+	bpf_u_int32 len;		//the length of the packet, also the maximum length we can get
+}
