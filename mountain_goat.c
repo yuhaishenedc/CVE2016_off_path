@@ -137,23 +137,26 @@ void probe_ack_burst(Session *ctx, unsigned probe_count) {
 long probe_ack_interval(Session *ctx, const unsigned probe_count, const long probe_usec_cost, const long usec_interval) {
 	struct timespec tstart, tend;
 
+	//allocate the buffer
 	char buffer[PROBE_BUFF_LEN];
 	struct ipv4_header *ip = (struct ipv4_header *) buffer;
 	struct tcp_header *tcp = (struct tcp_header *) (buffer + sizeof(struct ipv4_header));
-
 	memset(buffer, 0, PROBE_BUFF_LEN);
-
+	
+	//set the verion(4), header size(5), ttl(64), protocol(TCP), souce and destination ip(ctx) in ip header
 	ipv4_init(ip, ctx);
 	ip->len = sizeof(struct ipv4_header) + sizeof(struct tcp_header);
 
+	//set the header size(5), window size(ctx), source and destination port(ctx), seqnum(ctx) in tcp header
 	tcp_init(tcp, ctx);
 	tcp_set_seqnum(tcp, ctx->stream_seq+1000);
 	tcp_set_rst(tcp);
 	tcp_calculate_checksum(ip, tcp);
 
-	
+	//here the ctx-nsec_offset is 0
 	tsync_to_offset(ctx->nsec_offset);
-
+	
+	//send 200 packet in about 1s
 	clock_gettime(CLOCK_REALTIME, &tstart);
 	for(unsigned count = 0; count < probe_count; count++) {
 		int bytes_sent = sendto(ctx->raw_socket, buffer, ip->len, 0, ctx->daddr->ai_addr, ctx->daddr->ai_addrlen);
@@ -168,7 +171,7 @@ long probe_ack_interval(Session *ctx, const unsigned probe_count, const long pro
 	printf("%u probes dispatch in %.5f seconds\n", probe_count,
            ((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) - 
            ((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec));
-
+           
 	return tstart.tv_nsec;
 }
 
@@ -422,6 +425,7 @@ struct state state_synchronize(Session *ctx) {
 	printf("[ENTERING] state_synchronize\n");
 	struct state s = {next:state_synchronize};
 
+	//get the offset from 1 sencond
 	long n1_offset = probe_ack_interval(ctx, 200, 200, 1000000);
 	int n1 = count_acks_for_2secs(ctx);
 
