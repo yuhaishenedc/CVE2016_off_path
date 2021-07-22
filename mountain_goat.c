@@ -40,11 +40,19 @@ struct state state_finish(Session *ctx) {
 
 #define PROBE_BUFF_LEN 60
 unsigned count_acks_for_2secs(Session *ctx) {
+	
+	//here
+	printf("Enter count_ack_for_2_sec\n");
 	int response_count = 0;
 	int start = time(NULL);
 	while (time(NULL)-start <= 1) {
 		//get the tcp header from the packet
+		
+		//here the process stuck
 		struct tcp_header *h = session_read_packet(ctx);
+		
+		//here
+		printf("here is the middle\n");
 		if (h == NULL)
 			continue;
 
@@ -55,13 +63,16 @@ unsigned count_acks_for_2secs(Session *ctx) {
 			ctx->connection_closed = 1;
 		}
 
-
+		//there is a bug here
+		//ctx->stream_seq is always equal to tcp_get_acknum(h)
 		if (tcp_isset_ack(h) && !tcp_isset_fin(h) && ctx->stream_seq == tcp_get_acknum(h)) {
 			response_count += 1;
 		}	
 
 		free(h);
 	}
+	//here
+	printf("Exit count_ack_for_2_sec\n");
 	return response_count;
 }
 
@@ -429,6 +440,9 @@ struct state state_synchronize(Session *ctx) {
 	//get the offset from 1 sencond
 	long n1_offset = probe_ack_interval(ctx, 200, 200, 1000000);
 	int n1 = count_acks_for_2secs(ctx);
+	
+	//here
+	printf("the value of n1 is %d\n",n1);
 
 	if (n1 == 0 ) {
 		printf("[!] Server does not react on ACK probes.\n");

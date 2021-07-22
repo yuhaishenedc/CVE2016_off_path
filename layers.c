@@ -210,6 +210,32 @@ void enable_ip_header(Session *ctx) {
 
 }
 
+
+/*
+typedef struct {
+	pcap_t *handle;						//
+	int              raw_socket;		//
+	int              stream_socket;		//
+	struct addrinfo *attacker_addr;		//	by getaddrinfo
+	struct addrinfo *saddr;				//	by getaddrinfo
+	struct addrinfo *daddr;				//	by getaddrinfo
+
+
+	uint32_t stream_seq;				//	0
+	uint32_t stream_acks;				//	0
+
+	int connection_closed;				//	0
+	
+	long nsec_offset;					//	0
+	uint32_t sequence_chunk_start;		//
+	uint32_t sequence_chunk_end;		//
+	uint32_t step;						//
+	int sequence_i;						//
+	uint32_t sequence_in_window;		//
+	uint16_t window_size;				//
+
+} Session;		//to session_connect
+*/
 Session *new_session(char *attacker_ip, int attacker_source_port,  char *source_ip,  char *destination_ip, int destination_port) {
 	Session *ctx = (Session *)malloc(sizeof(Session));
 	memset(ctx, 0, sizeof(Session));
@@ -220,6 +246,7 @@ Session *new_session(char *attacker_ip, int attacker_source_port,  char *source_
 	ctx->stream_seq = 0;
 	ctx->stream_acks = 0;
 
+	
 	if ((ret = getaddrinfo(attacker_ip, NULL, NULL, &ctx->attacker_addr)) != 0) {
 		fprintf(stderr, "Source parsing failed: %s\n", gai_strerror(ret));
 		exit(EXIT_FAILURE);
@@ -300,12 +327,16 @@ void session_read_packets_update_1s(Session *ctx) {
 	time_t start = time(NULL);
 
 	while(time(NULL)-start <= 1) {
+		//here
+		printf("here 1\n");
 		struct tcp_header *h = session_read_packet(ctx);
 		if (h == NULL)
 			   continue;
 		ctx->stream_seq = tcp_get_acknum(h);
 		ctx->stream_acks = tcp_get_seqnum(h);
 		free(h);
+		//here
+		printf("here 2\n");
 	}
 }
 
@@ -330,8 +361,34 @@ void session_read_sin_ack(Session *ctx) {
 }
 
 
+/*
+typedef struct {
+	pcap_t *handle;						//
+	int              raw_socket;		//
+	int              stream_socket;		//
+	struct addrinfo *attacker_addr;		//	by getaddrinfo
+	struct addrinfo *saddr;				//	by getaddrinfo
+	struct addrinfo *daddr;				//	by getaddrinfo
 
+
+	uint32_t stream_seq;				//	0
+	uint32_t stream_acks;				//	0
+
+	int connection_closed;				//	0
+	
+	long nsec_offset;					//	0
+	uint32_t sequence_chunk_start;		//
+	uint32_t sequence_chunk_end;		//
+	uint32_t step;						//
+	int sequence_i;						//
+	uint32_t sequence_in_window;		//
+	uint16_t window_size;				//
+
+} Session;		//to session_connect
+*/
 void session_connect(Session *ctx) {
+
+	//use the bpf filter to get packet we want 
 	char *dev = "any";
 	char errbuf[PCAP_ERRBUF_SIZE];
  	bpf_u_int32 mask;
@@ -339,18 +396,22 @@ void session_connect(Session *ctx) {
 	struct bpf_program fp;
 	char filter_exp[1024];
 	char ip[256];
+	
+	//set the filter string form
+	//inet_ntop: convert the binary IPv4/IPv6 address to text form
 	snprintf(filter_exp, 1024,"src host %s and tcp dst port %i and tcp src port %i",
 			inet_ntop(ctx->daddr->ai_family,
 			(void *)&((struct sockaddr_in *)ctx->daddr->ai_addr)->sin_addr, ip, 256),
 			session_get_attacker_port(ctx), session_get_destination_port(ctx));
 
+	
 	ctx->handle = pcap_open_live(dev, 1024, 1, 500, errbuf);
 	if(ctx->handle == NULL ) {
 		fprintf(stderr, "Couldn't open device: %s\n", errbuf);
 		exit(EXIT_FAILURE);
 	}
 
-	/* Find the properties for the device */
+	// Find the properties for the device 
 	if (pcap_lookupnet(dev, &net, &mask, errbuf) == -1) {
 		fprintf(stderr, "Couldn't get netmask for device %s: %s\n", dev, errbuf);
 		net = 0;
@@ -358,33 +419,39 @@ void session_connect(Session *ctx) {
 	}
 
 
-	/* Compile and apply the filter */
+	// Compile and apply the filter 
 	if (pcap_compile(ctx->handle, &fp, filter_exp, 0, net) == -1) {
 		fprintf(stderr, "Couldn't parse filter %s: %s\n", filter_exp, pcap_geterr(ctx->handle));
 		exit(EXIT_FAILURE);
 	}
 
+	//set the raw socket in session
 	if (pcap_setfilter(ctx->handle, &fp) == -1) {
 		fprintf(stderr, "Couldn't install filter %s: %s\n", filter_exp, pcap_geterr(ctx->handle));
 		exit(EXIT_FAILURE);
 	}
 
+	//set the raw socket
 	ctx->raw_socket = socket(ctx->attacker_addr->ai_family , SOCK_RAW, IPPROTO_TCP);
 	if(ctx->raw_socket < 0) {
 		perror("Socket creation failed");
 	}
 
+	//use bind() function and connection() together we want to specify the source IP and port
+	//if just uses connect(), then system internally selects the source IP and port for the connection
 	ctx->stream_socket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if(bind(ctx->stream_socket, ctx->attacker_addr->ai_addr, ctx->daddr->ai_addrlen) == -1) {
 		perror("Bind failed");
 		exit(EXIT_FAILURE);
 	}
 
+	
 	if(connect(ctx->stream_socket, ctx->daddr->ai_addr, ctx->daddr->ai_addrlen) == -1 ) {
 		perror("Connect failed");
 		exit(EXIT_FAILURE);
 	}
 
+	//setsockopt(ctx->raw_socket,IPPROTO_IP,IP_HDRINCL,&val,sizeof(val))
 	disable_ip_header(ctx);
 	ctx->connection_closed = 0;
 	session_read_sin_ack(ctx);
