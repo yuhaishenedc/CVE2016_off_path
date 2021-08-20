@@ -298,7 +298,7 @@ uint16_t session_get_destination_port(Session *ctx) {
 uint16_t session_get_attacker_port(Session *ctx) {
 	return ntohs(((struct sockaddr_in *)ctx->attacker_addr->ai_addr)->sin_port);
 }
-
+pcap_next_ex
 
 
 struct tcp_header *session_read_packet(Session *ctx) {
@@ -405,13 +405,33 @@ void session_connect(Session *ctx) {
 			session_get_attacker_port(ctx), session_get_destination_port(ctx));
 
 	
+	
+	//not modify
+	/*
 	ctx->handle = pcap_open_live(dev, 1024, 1, 500, errbuf);
 	if(ctx->handle == NULL ) {
 		fprintf(stderr, "Couldn't open device: %s\n", errbuf);
 		exit(EXIT_FAILURE);
 	}
-
-	// Find the properties for the device 
+	*/
+	
+	
+	
+	//modified
+	ctx->handle=pcap_create(dev,errbuf);
+	pcap_set_snaplen(ctx->handle,1024);
+	pcap_set_promisc(ctx->handle,1);
+	pcap_set_timeout(ctx->handle,500);
+	//pcap_set_immediate_mode(ctx->handle,1);
+	pcap_setnonblock(ctx->handle,1,errbuf);
+	if(pcap_activate(ctx->handle)!=0){
+		fprintf(stderr, "Couldn't open device: %s\n", errbuf);
+		exit(EXIT_FAILURE);
+	}
+	
+	
+	
+	// get the number and mask for the device 
 	if (pcap_lookupnet(dev, &net, &mask, errbuf) == -1) {
 		fprintf(stderr, "Couldn't get netmask for device %s: %s\n", dev, errbuf);
 		net = 0;
@@ -431,31 +451,32 @@ void session_connect(Session *ctx) {
 		exit(EXIT_FAILURE);
 	}
 
-	//set the raw socket
+	//create the raw socket for spoofing 
 	ctx->raw_socket = socket(ctx->attacker_addr->ai_family , SOCK_RAW, IPPROTO_TCP);
 	if(ctx->raw_socket < 0) {
 		perror("Socket creation failed");
 	}
 
-	//use bind() function and connection() together we want to specify the source IP and port
+	//use bind() function and connection() together we can specify the source IP and port
 	//if just uses connect(), then system internally selects the source IP and port for the connection
 	ctx->stream_socket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if(bind(ctx->stream_socket, ctx->attacker_addr->ai_addr, ctx->daddr->ai_addrlen) == -1) {
 		perror("Bind failed");
 		exit(EXIT_FAILURE);
 	}
-
-	
 	if(connect(ctx->stream_socket, ctx->daddr->ai_addr, ctx->daddr->ai_addrlen) == -1 ) {
 		perror("Connect failed");
 		exit(EXIT_FAILURE);
 	}
 
-	//setsockopt(ctx->raw_socket,IPPROTO_IP,IP_HDRINCL,&val,sizeof(val))
+	//the function used is setsockopt(ctx->raw_socket,IPPROTO_IP,IP_HDRINCL,&val,sizeof(val))
 	disable_ip_header(ctx);
 	ctx->connection_closed = 0;
+	
+	
 	session_read_sin_ack(ctx);
-	session_read_packets_update_1s(ctx);
+	
+	//session_read_packets_update_1s(ctx);
 }
 
 

@@ -51,8 +51,6 @@ unsigned count_acks_for_2secs(Session *ctx) {
 		//here the process stuck
 		struct tcp_header *h = session_read_packet(ctx);
 		
-		//here
-		printf("here is the middle\n");
 		if (h == NULL)
 			continue;
 
@@ -146,10 +144,10 @@ void probe_ack_burst(Session *ctx, unsigned probe_count) {
 }
 
 
+//200 200 1000000
 long probe_ack_interval(Session *ctx, const unsigned probe_count, const long probe_usec_cost, const long usec_interval) {
 	struct timespec tstart, tend;
 
-	//allocate the buffer
 	char buffer[PROBE_BUFF_LEN];
 	struct ipv4_header *ip = (struct ipv4_header *) buffer;
 	struct tcp_header *tcp = (struct tcp_header *) (buffer + sizeof(struct ipv4_header));
@@ -161,15 +159,23 @@ long probe_ack_interval(Session *ctx, const unsigned probe_count, const long pro
 
 	//set the header size(5), window size(ctx), source and destination port(ctx), seqnum(ctx) in tcp header
 	tcp_init(tcp, ctx);
-	tcp_set_seqnum(tcp, ctx->stream_seq+1000);
+	
+	//modified, because the window size we get is about 300, smaller than
+	//tcp_set_seqnum(tcp, ctx->stream_seq+1000);
+	tcp_set_seqnum(tcp,ctx->stream_seq+100);
 	tcp_set_rst(tcp);
 	tcp_calculate_checksum(ip, tcp);
 
 	//here the ctx-nsec_offset is 0
 	tsync_to_offset(ctx->nsec_offset);
 	
-	//send 200 packet in about 1s
+	
 	clock_gettime(CLOCK_REALTIME, &tstart);
+	
+	//here is a test, and a problem found
+	//if the time interval is about 100ms, then the server will respond to every RST packet we send
+	//but if the interval is about 10ms, the server only respond to few packet :(
+	/*
 	for(unsigned count = 0; count < probe_count; count++) {
 		int bytes_sent = sendto(ctx->raw_socket, buffer, ip->len, 0, ctx->daddr->ai_addr, ctx->daddr->ai_addrlen);
 		if (bytes_sent < 0 ) {
@@ -177,6 +183,16 @@ long probe_ack_interval(Session *ctx, const unsigned probe_count, const long pro
 			exit(-1);
 		}
 		usleep((usec_interval-(probe_count*probe_usec_cost))/probe_count);
+	}
+	*/
+	
+	for(unsigned count = 0; count < probe_count; count++) {
+		int bytes_sent = sendto(ctx->raw_socket, buffer, ip->len, 0, ctx->daddr->ai_addr, ctx->daddr->ai_addrlen);
+		if (bytes_sent < 0 ) {
+			perror("sendto() error");
+			exit(-1);
+		}
+		usleep(10000);
 	}
 
 	clock_gettime(CLOCK_REALTIME, &tend);
@@ -437,12 +453,9 @@ struct state state_synchronize(Session *ctx) {
 	printf("[ENTERING] state_synchronize\n");
 	struct state s = {next:state_synchronize};
 
-	//get the offset from 1 sencond
+	//get the offset from 1 sencond, and send 200 packets
 	long n1_offset = probe_ack_interval(ctx, 200, 200, 1000000);
 	int n1 = count_acks_for_2secs(ctx);
-	
-	//here
-	printf("the value of n1 is %d\n",n1);
 
 	if (n1 == 0 ) {
 		printf("[!] Server does not react on ACK probes.\n");
@@ -462,7 +475,7 @@ struct state state_synchronize(Session *ctx) {
 	if (n1 == 100)
 		goto synced;
 
-	//Now we wait until we reach nanosec offset + 5 milliseconds
+	//Now we wait until we reach nanosec offset + 5 ms
 	ctx->nsec_offset = n1_offset + 5000000;
 
 	long n2_offset = probe_ack_interval(ctx, 200, 200, 1000000);
